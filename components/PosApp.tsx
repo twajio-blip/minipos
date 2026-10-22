@@ -2073,12 +2073,8 @@ function Customers({
                 ["name", "Customer name", true],
                 ["phone", "Phone"],
                 ["email", "Email"],
-                ["proprietor", "Proprietor / contact"],
                 ["address", "Address"],
-                ["nid", "NID"],
-                ["bin", "BIN"],
                 ["plant", "Plant / company"],
-                ["industry", "Industry"],
                 ["notes", "Notes"],
               ].map(([n, l, r]) => (
                 <div key={String(n)}>
