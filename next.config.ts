@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  agentRules: false,
+  serverExternalPackages: ["sync-mysql", "sync-rpc"],
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,

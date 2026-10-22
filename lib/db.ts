@@ -1,24 +1,37 @@
-import Database from "better-sqlite3";
-import path from "node:path";
-import fs from "node:fs";
-import os from "node:os";
+import { createRequire } from "node:module";
 import bcrypt from "bcryptjs";
 
-const isProductionBuild =
-  process.env.NEXT_PHASE === "phase-production-build";
-const dbPath =
-  (isProductionBuild
-    ? path.join(os.tmpdir(), "lite-pos-build.sqlite")
-    : process.env.DATABASE_PATH) ||
-  (process.env.NETLIFY
-    ? path.join("/tmp", "lite-pos.sqlite")
-    : path.join(process.cwd(), "database", "lite-pos.sqlite"));
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+const require = createRequire(import.meta.url);
+const SyncMysql = require("sync-mysql");
+const mysql = new SyncMysql({ host: "127.0.0.1", port: 3306, user: "root", password: "", database: "minipos" });
+const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
+const sql = (value: string) => value.replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/ COLLATE NOCASE/gi, "");
+export const db = {
+  pragma: (statement: string) => void statement,
+  exec: (statement: string) => {
+    if (/^\s*(CREATE TABLE|CREATE INDEX|INSERT OR IGNORE|UPDATE customers|ALTER TABLE)/i.test(statement)) return;
+    return mysql.query(sql(statement));
+  },
+  prepare: (statement: string) => ({
+    all: (...params: unknown[]) => {
+      const match = statement.match(/^PRAGMA table_info\(([^)]+)\)/i);
+      if (match) return mysql.query(`SHOW COLUMNS FROM \`${match[1]}\``).map((x: { Field: string }) => ({ name: x.Field }));
+      return mysql.query(sql(statement), params);
+    },
+    get: (...params: unknown[]) => mysql.query(sql(statement), params)[0],
+    run: (...params: unknown[]) => {
+      const result = mysql.query(sql(statement), params);
+      return { lastInsertRowid: result.insertId, changes: result.affectedRows };
+    },
+  }),
+  transaction: <T>(work: () => T) => () => {
+    mysql.query("START TRANSACTION");
+    try { const result = work(); mysql.query("COMMIT"); return result; }
+    catch (error) { mysql.query("ROLLBACK"); throw error; }
+  },
+};
 
-const globalDb = globalThis as unknown as { litePosDb?: Database.Database };
-export const db = globalDb.litePosDb ?? new Database(dbPath);
-if (process.env.NODE_ENV !== "production") globalDb.litePosDb = db;
-
+if (!isProductionBuild) {
 db.pragma("busy_timeout = 15000");
 try {
   db.pragma("journal_mode = WAL");
@@ -189,6 +202,7 @@ db.prepare(
 db.prepare(
   "INSERT OR IGNORE INTO users(name,email,password) VALUES(?,?,?)",
 ).run("Administrator", "admin@litepos.local", bcrypt.hashSync("admin123", 12));
+}
 
 export function nextNumber(
   table:
