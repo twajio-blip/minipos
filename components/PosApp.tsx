@@ -722,7 +722,7 @@ function CustomerSelect({
     return () => document.removeEventListener("pointerdown", close);
   }, []);
   return (
-    <div ref={wrap} className="relative">
+    <div ref={wrap} className="relative z-50 focus-within:z-[80]">
       <input
         className="field"
         value={
@@ -904,18 +904,23 @@ function ProductInput({
         required
       />
       {open && q && items.length > 0 && (
-        <div className="absolute z-20 mt-1 max-h-44 w-full overflow-auto rounded-lg border bg-white shadow-xl">
+        <div className="absolute left-0 top-full z-[100] mt-2 max-h-64 w-full min-w-72 overflow-auto rounded-xl border-2 border-emerald-600 bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.24)]">
+          <div className="sticky top-0 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-emerald-800">
+            <Search size={14} />
+            Suggested products
+          </div>
           {items.map((p) => (
             <button
               type="button"
               key={p.id}
-              className="block w-full px-3 py-2 text-left text-sm font-semibold hover:bg-emerald-50"
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-emerald-100 hover:text-emerald-900 focus:bg-emerald-100 focus:outline-none"
               onClick={() => {
                 setQ(p.name);
                 setOpen(false);
                 onChange({ ...line, name: p.name, product_id: p.id });
               }}
             >
+              <Package size={16} className="shrink-0 text-emerald-700" />
               {p.name}
             </button>
           ))}
