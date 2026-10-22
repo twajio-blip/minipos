@@ -1,10 +1,15 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import bcrypt from "bcryptjs";
 
+const isProductionBuild =
+  process.env.NEXT_PHASE === "phase-production-build";
 const dbPath =
-  process.env.DATABASE_PATH ||
+  (isProductionBuild
+    ? path.join(os.tmpdir(), "lite-pos-build.sqlite")
+    : process.env.DATABASE_PATH) ||
   (process.env.NETLIFY
     ? path.join("/tmp", "lite-pos.sqlite")
     : path.join(process.cwd(), "database", "lite-pos.sqlite"));
