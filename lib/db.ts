@@ -4,11 +4,11 @@ import bcrypt from "bcryptjs";
 const require = createRequire(import.meta.url);
 const SyncMysql = require("sync-mysql");
 const mysql = new SyncMysql({
-  host: "103.244.113.58",
+  host: "127.0.0.1",
   port: 3306,
-  user: "datadssc_datadssc_lightpos",
-  password: "datadssc_lightpos",
-  database: "datadssc_lightpos",
+  user: "root",
+  password: "",
+  database: "minipos",
 });
 const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
 const sql = (value: string) => value.replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/ COLLATE NOCASE/gi, "");
@@ -205,9 +205,13 @@ db.exec(`
 db.prepare(
   "INSERT OR IGNORE INTO settings(id, business_name) VALUES(1, 'Lite POS')",
 ).run();
-db.prepare(
-  "INSERT OR IGNORE INTO users(name,email,password) VALUES(?,?,?)",
-).run("Administrator", "admin@litepos.local", bcrypt.hashSync("admin123", 12));
+if (!db.prepare("SELECT id FROM users WHERE email=? LIMIT 1").get("admin@litepos.local")) {
+  db.prepare("INSERT INTO users(name,email,password) VALUES(?,?,?)").run(
+    "Administrator",
+    "admin@litepos.local",
+    bcrypt.hashSync("admin123", 12),
+  );
+}
 }
 
 export function nextNumber(
