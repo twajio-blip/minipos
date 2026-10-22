@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const require = createRequire(import.meta.url);
 const SyncMysql = require("sync-mysql");
 const mysql = new SyncMysql({
-  host: "datadss.com",
+  host: "103.29.180.101",
   port: 3306,
   user: "datadssc_datadssc_lightpos",
   password: "datadssc_lightpos",
