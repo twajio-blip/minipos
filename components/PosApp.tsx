@@ -1045,11 +1045,8 @@ function SaleForm({
               <CustomerSelect
                 value={customer}
                 refreshKey={customerRefresh}
-                emptyLabel="New Customer"
-                onChange={(value) => {
-                  if (value) setCustomer(value);
-                  else setNewCustomerOpen(true);
-                }}
+                emptyLabel="Walk-in Customer"
+                onChange={(value) => setCustomer(value)}
               />
             </div>
             <div>
