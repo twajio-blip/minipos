@@ -35,7 +35,9 @@ async function api(url: string, options?: RequestInit) {
     location.href = "/login";
     throw new Error("Unauthenticated");
   }
-  const j = await r.json();
+  const text = await r.text();
+  let j: any = {};
+  try { j = text ? JSON.parse(text) : {}; } catch { j = {}; }
   if (!r.ok) throw new Error(j.message || "Request failed");
   return j;
 }
@@ -49,13 +51,16 @@ async function post(body: any) {
 function useData(type: string, extra = "", tick = 0) {
   const [data, setData] = useState<any>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   useEffect(() => {
     setLoading(true);
+    setError("");
     api(`/api/pos?type=${type}${extra}`)
       .then(setData)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load data"))
       .finally(() => setLoading(false));
   }, [type, extra, tick]);
-  return { data, loading };
+  return { data, loading, error };
 }
 function Header({
   title,
@@ -590,8 +595,10 @@ function SidebarNav({
 }
 
 function Dashboard({ tick, go }: { tick: number; go: (s: string) => void }) {
-  const { data, loading } = useData("dashboard", "", tick);
+  const { data, loading, error } = useData("dashboard", "", tick);
   if (loading) return <p>Loading…</p>;
+  if (error || !data?.metrics)
+    return <div className="card border-red-200 bg-red-50 p-5 text-red-700"><b>Dashboard could not load.</b><p className="mt-1 text-sm">{error || "The server returned an invalid response."}</p></div>;
   const m = data.metrics;
   const cards = [
     ["Today's sales", m.today_sales, "bg-emerald-50 text-emerald-700"],
