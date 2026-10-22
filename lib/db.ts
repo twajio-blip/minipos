@@ -6,8 +6,8 @@ const SyncMysql = require("sync-mysql");
 const mysql = new SyncMysql({
   host: "datadss.com",
   port: 3306,
-  user: "admin",
-  password: "admin123",
+  user: "datadssc_datadssc_lightpos",
+  password: "datadssc_lightpos",
   database: "datadssc_lightpos",
 });
 const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
