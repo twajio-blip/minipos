@@ -3,7 +3,13 @@ import bcrypt from "bcryptjs";
 
 const require = createRequire(import.meta.url);
 const SyncMysql = require("sync-mysql");
-const mysql = new SyncMysql({ host: "127.0.0.1", port: 3306, user: "root", password: "", database: "minipos" });
+const mysql = new SyncMysql({
+  host: 103.244.113.58,
+  port: 3306,
+  user: "datadssc_datadssc_lightpos",
+  password: "datadssc_lightpos",
+  database: "datadssc_lightpos",
+});
 const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
 const sql = (value: string) => value.replace(/INSERT OR IGNORE/gi, "INSERT IGNORE").replace(/ COLLATE NOCASE/gi, "");
 export const db = {
