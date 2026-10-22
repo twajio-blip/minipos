@@ -47,14 +47,13 @@ export default function Login() {
         </div>
         {error && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <label className="label">{bangla ? "ইমেইল" : "Email"}</label>
-        <input className="field mb-4" name="email" type="email" defaultValue="admin@litepos.local" required />
+        <input className="field mb-4" name="email" type="email" autoComplete="off" required />
         <label className="label">{bangla ? "পাসওয়ার্ড" : "Password"}</label>
-        <input className="field mb-5" name="password" type="password" defaultValue="admin123" required />
+        <input className="field mb-5" name="password" type="password" autoComplete="off" required />
         <button disabled={busy} className="btn btn-primary w-full">
           <LockKeyhole size={17} />
           {busy ? (bangla ? "সাইন ইন হচ্ছে…" : "Signing in…") : (bangla ? "সাইন ইন" : "Sign in")}
         </button>
-        <p className="mt-5 text-center text-xs text-slate-400">{bangla ? "ডিফল্ট" : "Default"}: admin@litepos.local / admin123</p>
       </form>
     </main>
   );
