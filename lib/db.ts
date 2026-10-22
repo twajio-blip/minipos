@@ -3,10 +3,12 @@ import path from "node:path";
 import fs from "node:fs";
 import bcrypt from "bcryptjs";
 
-const dataDir = path.join(process.cwd(), "database");
-fs.mkdirSync(dataDir, { recursive: true });
 const dbPath =
-  process.env.DATABASE_PATH || path.join(dataDir, "lite-pos.sqlite");
+  process.env.DATABASE_PATH ||
+  (process.env.NETLIFY
+    ? path.join("/tmp", "lite-pos.sqlite")
+    : path.join(process.cwd(), "database", "lite-pos.sqlite"));
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const globalDb = globalThis as unknown as { litePosDb?: Database.Database };
 export const db = globalDb.litePosDb ?? new Database(dbPath);
