@@ -506,14 +506,15 @@ export async function POST(req: NextRequest) {
         .object({
           id: z.coerce.number().int().positive(),
           name: z.string().trim().min(1),
+          price: z.coerce.number().min(0),
         })
         .parse(body);
       const old = db.prepare("SELECT * FROM products WHERE id=?").get(p.id);
       if (!old) return fail("Product not found.", 404);
       db.transaction(() => {
         db.prepare(
-          "UPDATE products SET name=?,normalized_name=? WHERE id=?",
-        ).run(p.name.replace(/\s+/g, " "), normalizeProductName(p.name), p.id);
+          "UPDATE products SET name=?,normalized_name=?,price=? WHERE id=?",
+        ).run(p.name.replace(/\s+/g, " "), normalizeProductName(p.name), p.price, p.id);
         db.prepare(
           "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,old_values,new_values,reason) VALUES(?,?,?,?,?,?,?)",
         ).run(
@@ -522,11 +523,19 @@ export async function POST(req: NextRequest) {
           "product",
           p.id,
           JSON.stringify(old),
-          JSON.stringify({ name: p.name }),
-          "Product renamed",
+          JSON.stringify({ name: p.name, price: p.price }),
+          "Product updated",
         );
       })();
       return NextResponse.json({ ok: true });
+    }
+    if (action === "product.create") {
+      const p = z.object({ name: z.string().trim().min(1), price: z.coerce.number().min(0) }).parse(body);
+      const name = p.name.replace(/\s+/g, " ");
+      const existing = db.prepare("SELECT id FROM products WHERE normalized_name=? LIMIT 1").get(normalizeProductName(name));
+      if (existing) return fail("A product with this name already exists.", 409);
+      const result = db.prepare("INSERT INTO products(name,normalized_name,price,use_count) VALUES(?,?,?,0)").run(name, normalizeProductName(name), p.price);
+      return NextResponse.json({ id: Number(result.lastInsertRowid) });
     }
     if (action === "product.delete") {
       const p = z
@@ -631,11 +640,12 @@ export async function POST(req: NextRequest) {
           if (!productId) {
             const product = db
               .prepare(
-                "INSERT INTO products(name,normalized_name,use_count,last_used_at) VALUES(?,?,1,CURRENT_TIMESTAMP)",
+                "INSERT INTO products(name,normalized_name,price,use_count,last_used_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP)",
               )
               .run(
                 item.name.trim().replace(/\s+/g, " "),
                 normalizeProductName(item.name),
+                item.unit_price,
               );
             productId = Number(product.lastInsertRowid);
           } else
@@ -771,11 +781,12 @@ export async function POST(req: NextRequest) {
           if (!productId) {
             const product = db
               .prepare(
-                "INSERT INTO products(name,normalized_name,use_count,last_used_at) VALUES(?,?,1,CURRENT_TIMESTAMP)",
+                "INSERT INTO products(name,normalized_name,price,use_count,last_used_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP)",
               )
               .run(
                 item.name.trim().replace(/\s+/g, " "),
                 normalizeProductName(item.name),
+                item.unit_price,
               );
             productId = Number(product.lastInsertRowid);
           } else
@@ -1098,11 +1109,12 @@ export async function POST(req: NextRequest) {
           if (!productId) {
             const product = db
               .prepare(
-                "INSERT INTO products(name,normalized_name,use_count,last_used_at) VALUES(?,?,1,CURRENT_TIMESTAMP)",
+                "INSERT INTO products(name,normalized_name,price,use_count,last_used_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP)",
               )
               .run(
                 item.name.trim().replace(/\s+/g, " "),
                 normalizeProductName(item.name),
+                item.unit_price,
               );
             productId = Number(product.lastInsertRowid);
           } else
@@ -1185,11 +1197,12 @@ export async function POST(req: NextRequest) {
           if (!productId) {
             const product = db
               .prepare(
-                "INSERT INTO products(name,normalized_name,use_count,last_used_at) VALUES(?,?,1,CURRENT_TIMESTAMP)",
+                "INSERT INTO products(name,normalized_name,price,use_count,last_used_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP)",
               )
               .run(
                 item.name.trim().replace(/\s+/g, " "),
                 normalizeProductName(item.name),
+                item.unit_price,
               );
             productId = Number(product.lastInsertRowid);
           }

@@ -924,7 +924,7 @@ function ProductInput({
               onClick={() => {
                 setQ(p.name);
                 setOpen(false);
-                onChange({ ...line, name: p.name, product_id: p.id });
+                onChange({ ...line, name: p.name, product_id: p.id, unit_price: Number(p.price || 0) });
               }}
             >
               <Package size={16} className="shrink-0 text-emerald-700" />
@@ -2175,17 +2175,28 @@ function Products({
     tick,
   );
   const [edit, setEdit] = useState<any>(null);
+  const [adding, setAdding] = useState(false);
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const name = String(new FormData(e.currentTarget).get("name") || "");
+    const form = new FormData(e.currentTarget);
+    const name = String(form.get("name") || "");
+    const price = Number(form.get("price") || 0);
     try {
-      await post({ action: "product.update", id: edit.id, name });
+      await post({ action: "product.update", id: edit.id, name, price });
       setEdit(null);
       notify("Product updated");
       refresh();
     } catch (e: any) {
       alert(e.message);
     }
+  }
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    try {
+      await post({ action: "product.create", name: form.get("name"), price: form.get("price") });
+      setAdding(false); notify("Product saved"); refresh();
+    } catch (e: any) { alert(e.message); }
   }
   async function remove(p: any) {
     if (!confirm(`Delete product "${p.name}"?`)) return;
@@ -2203,7 +2214,9 @@ function Products({
         title="Products"
         subtitle="Products created automatically from sales and direct returns"
         action={
-          <div className="relative">
+          <div className="flex gap-2">
+            <button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} /> Add Product</button>
+            <div className="relative">
             <Search
               size={16}
               className="absolute left-3 top-3 text-slate-400"
@@ -2214,6 +2227,7 @@ function Products({
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            </div>
           </div>
         }
       />
@@ -2226,6 +2240,7 @@ function Products({
               <thead>
                 <tr>
                   <th>Product Name</th>
+                  <th className="amount">Price</th>
                   <th>Created</th>
                   <th>Last Used</th>
                   <th className="amount">Sales</th>
@@ -2237,6 +2252,7 @@ function Products({
                 {data.map((p: any) => (
                   <tr key={p.id}>
                     <td className="font-semibold">{p.name}</td>
+                    <td className="amount">{cash(p.price)}</td>
                     <td>{String(p.created_at).slice(0, 10)}</td>
                     <td>
                       {p.last_used_at
@@ -2274,6 +2290,8 @@ function Products({
               autoFocus
               required
             />
+            <label className="label mt-4">Price</label>
+            <input className="field" name="price" type="number" min="0" step="0.01" defaultValue={Number(edit.price || 0)} required />
             <p className="mt-2 text-xs text-slate-500">
               Renaming changes future suggestions. Existing invoice descriptions
               remain unchanged.
@@ -2281,6 +2299,17 @@ function Products({
             <button className="btn btn-primary mt-5 w-full">
               Save Changes
             </button>
+          </form>
+        </Modal>
+      )}
+      {adding && (
+        <Modal title="Add Product" onClose={() => setAdding(false)}>
+          <form onSubmit={create}>
+            <label className="label">Product name</label>
+            <input className="field" name="name" autoFocus required />
+            <label className="label mt-4">Price</label>
+            <input className="field" name="price" type="number" min="0" step="0.01" required />
+            <button className="btn btn-primary mt-5 w-full">Save Product</button>
           </form>
         </Modal>
       )}

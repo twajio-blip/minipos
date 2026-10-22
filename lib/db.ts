@@ -165,6 +165,10 @@ const customerColumns = db.prepare("PRAGMA table_info(customers)").all() as {
   name: string;
 }[];
 const settingColumns = db.prepare("PRAGMA table_info(settings)").all() as { name: string }[];
+const productColumns = db.prepare("PRAGMA table_info(products)").all() as { name: string }[];
+if (!productColumns.some((column) => column.name === "price")) {
+  db.prepare("ALTER TABLE products ADD COLUMN price DECIMAL(18,4) NOT NULL DEFAULT 0 AFTER normalized_name").run();
+}
 if (!settingColumns.some((column) => column.name === "language")) {
   db.exec("ALTER TABLE settings ADD COLUMN language TEXT NOT NULL DEFAULT 'en'");
 }
