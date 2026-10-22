@@ -722,7 +722,7 @@ function CustomerSelect({
     return () => document.removeEventListener("pointerdown", close);
   }, []);
   return (
-    <div ref={wrap} className="relative z-50 focus-within:z-[80]">
+    <div ref={wrap} className="relative z-[9998] focus-within:z-[9998]">
       <input
         className="field"
         value={
@@ -904,7 +904,7 @@ function ProductInput({
         required
       />
       {open && q && items.length > 0 && (
-        <div className="absolute left-0 top-full z-[100] mt-2 max-h-64 w-full min-w-72 overflow-auto rounded-xl border-2 border-emerald-600 bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.24)]">
+        <div className="absolute left-0 top-full z-[9999] mt-2 max-h-64 w-full min-w-72 overflow-auto rounded-xl border-2 border-emerald-600 bg-white p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.35)]">
           <div className="sticky top-0 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-emerald-800">
             <Search size={14} />
             Suggested products
