@@ -694,6 +694,7 @@ function CustomerSelect({
   value,
   onChange,
   emptyLabel = "Walk-in Customer",
+  placeholder = emptyLabel,
   areaId = 0,
   villageId = 0,
   refreshKey = 0,
@@ -701,6 +702,7 @@ function CustomerSelect({
   value: any;
   onChange: (v: any, customer?: any) => void;
   emptyLabel?: string;
+  placeholder?: string;
   areaId?: number;
   villageId?: number;
   refreshKey?: number;
@@ -737,7 +739,7 @@ function CustomerSelect({
             ? query
             : selected
               ? `${selected.code} — ${selected.name}`
-              : emptyLabel
+              : placeholder
         }
         onFocus={() => {
           setOpen(true);
@@ -1045,8 +1047,12 @@ function SaleForm({
               <CustomerSelect
                 value={customer}
                 refreshKey={customerRefresh}
-                emptyLabel="Walk-in Customer"
-                onChange={(value) => setCustomer(value)}
+                emptyLabel="New Customer"
+                placeholder=""
+                onChange={(value) => {
+                  if (value) setCustomer(value);
+                  else setNewCustomerOpen(true);
+                }}
               />
             </div>
             <div>
