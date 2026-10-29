@@ -17,3 +17,17 @@ html[lang="bn"] body,html[lang="bn"] button,html[lang="bn"] input,html[lang="bn"
   .invoice-58mm .table th:nth-child(4),.invoice-58mm .table td:nth-child(4){display:none}
   .invoice-a4{width:100%!important;font-size:12px}
 }
+
+@media(max-width:768px){
+  .sale-lines-wrap{overflow:visible;border:0;border-radius:0}
+  .sale-lines-table,.sale-lines-table tbody{display:block;width:100%}
+  .sale-lines-table thead{display:none}
+  .sale-lines-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.75rem;margin-bottom:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;background:#fafcfb}
+  .sale-lines-table td{display:block;min-width:0;padding:0;border:0;white-space:normal}
+  .sale-lines-table td:first-child{grid-column:1/-1}
+  .sale-lines-table td::before{content:attr(data-label);display:block;margin-bottom:.3rem;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#667085;text-align:left}
+  .sale-lines-table td.amount{text-align:left!important}
+  .sale-lines-table .sale-line-remove{display:flex;align-items:flex-end;justify-content:flex-end}
+  .sale-lines-table .sale-line-remove::before{display:none}
+  .sale-lines-table .sale-line-remove button{display:grid;min-height:42px;min-width:42px;place-items:center;border-radius:9px;background:#fff0f0}
+}

@@ -40,7 +40,7 @@ export default function Login() {
 
   return (
     <main className="min-h-screen grid place-items-center p-5 bg-[radial-gradient(circle_at_top_left,#dceddf,#f5f7f6_45%)]">
-      <form onSubmit={submit} className="card w-full max-w-sm p-7">
+      <form onSubmit={submit} autoComplete="off" className="card w-full max-w-sm p-7">
         <div className="mb-7 flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#176b5b] text-white"><ReceiptText /></span>
           <div><h1 className="text-xl font-bold">{businessName}</h1><p className="text-sm text-slate-500">{bangla ? "চালিয়ে যেতে সাইন ইন করুন" : "Sign in to continue"}</p></div>
@@ -49,7 +49,7 @@ export default function Login() {
         <label className="label">{bangla ? "ইমেইল" : "Email"}</label>
         <input className="field mb-4" name="email" type="email" autoComplete="off" required />
         <label className="label">{bangla ? "পাসওয়ার্ড" : "Password"}</label>
-        <input className="field mb-5" name="password" type="password" autoComplete="off" required />
+        <input className="field mb-5" name="password" type="password" autoComplete="new-password" required />
         <button disabled={busy} className="btn btn-primary w-full">
           <LockKeyhole size={17} />
           {busy ? (bangla ? "সাইন ইন হচ্ছে…" : "Signing in…") : (bangla ? "সাইন ইন" : "Sign in")}

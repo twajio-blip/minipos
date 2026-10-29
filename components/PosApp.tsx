@@ -27,6 +27,20 @@ import {
 } from "lucide-react";
 
 const TODAY = new Date().toISOString().slice(0, 10);
+const BANGLA_DIGITS = ["\u09e6", "\u09e7", "\u09e8", "\u09e9", "\u09ea", "\u09eb", "\u09ec", "\u09ed", "\u09ee", "\u09ef"];
+const toBanglaNumber = (value: string | number) =>
+  String(value).replace(/\d/g, (digit) => BANGLA_DIGITS[Number(digit)]);
+const toEnglishNumber = (value: string) =>
+  value.replace(/[\u09e6-\u09ef]/g, (digit) => String(BANGLA_DIGITS.indexOf(digit)));
+const cleanDecimal = (value: string) => {
+  const cleaned = toEnglishNumber(value).replace(/[^\d.]/g, "");
+  const [whole = "", ...fractions] = cleaned.split(".");
+  return fractions.length ? `${whole}.${fractions.join("")}` : whole;
+};
+const cleanDate = (value: string) =>
+  toEnglishNumber(value).replace(/[^\d-]/g, "").slice(0, 10);
+const decimalValue = (value: string | number, bangla = false) =>
+  bangla ? toBanglaNumber(value) : String(value);
 const cash = (v: any, c = "৳") =>
   `${c}${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 async function api(url: string, options?: RequestInit) {
@@ -487,21 +501,21 @@ export default function PosApp() {
           </p>
           <button
             onClick={toggleLanguage}
-            className="ml-auto rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
-            title="Change language"
-          >
-            {businessSettings?.language === "bn" ? "EN" : "বাংলা"}
-          </button>
-          <button
-            onClick={refresh}
-            className="ml-2 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-            title="Refresh"
+            className="ml-auto inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+            title={businessSettings?.language === "bn" ? "Switch to English" : "বাংলায় পরিবর্তন করুন"}
           >
             <RefreshCw size={18} />
+            <span>{businessSettings?.language === "bn" ? "EN" : "বাংলা"}</span>
           </button>
         </header>
         <div className="main-pad p-5 md:p-7">
-          <View tick={tick} notify={notify} refresh={refresh} go={setPage} />
+          <View
+            tick={tick}
+            notify={notify}
+            refresh={refresh}
+            go={setPage}
+            banglaNumbers={businessSettings?.numeral_system === "bn"}
+          />
         </div>
       </main>
     </div>
@@ -636,17 +650,16 @@ function Dashboard({ tick, go }: { tick: number; go: (s: string) => void }) {
           </div>
         ))}
       </div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-3">
-        <section className="card p-5 xl:col-span-2">
+      <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-3">
+        <section className="card min-w-0 overflow-hidden p-4 sm:p-5 xl:col-span-2">
           <h2 className="mb-4 font-bold">Recent sales</h2>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
+          <div className="table-wrap max-h-72 w-full max-w-full overflow-auto overscroll-contain md:max-h-none">
+            <table className="table min-w-[560px]">
+              <thead className="sticky top-0 z-10">
                 <tr>
                   <th>Invoice</th>
                   <th>Customer</th>
                   <th>Date</th>
-                  <th>Status</th>
                   <th className="amount">Total</th>
                 </tr>
               </thead>
@@ -656,9 +669,6 @@ function Dashboard({ tick, go }: { tick: number; go: (s: string) => void }) {
                     <td className="font-semibold">{x.invoice_no}</td>
                     <td>{x.customer_name}</td>
                     <td>{x.sale_date}</td>
-                    <td>
-                      <Status value={x.status} />
-                    </td>
                     <td className="amount">{cash(x.grand_total)}</td>
                   </tr>
                 ))}
@@ -666,19 +676,19 @@ function Dashboard({ tick, go }: { tick: number; go: (s: string) => void }) {
             </table>
           </div>
         </section>
-        <section className="card p-5">
+        <section className="card min-w-0 overflow-hidden p-4 sm:p-5">
           <h2 className="mb-4 font-bold">Top products</h2>
           {data.top.length ? (
             data.top.map((x: any) => (
               <div
                 key={x.product_name}
-                className="flex items-center justify-between border-b border-slate-100 py-3 last:border-0"
+                className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-100 py-3 last:border-0"
               >
-                <div>
-                  <b className="text-sm">{x.product_name}</b>
+                <div className="min-w-0 flex-1">
+                  <b className="block truncate text-sm" title={x.product_name}>{x.product_name}</b>
                   <p className="text-xs text-slate-400">{x.quantity} sold</p>
                 </div>
-                <span className="text-sm font-bold">{cash(x.amount)}</span>
+                <span className="shrink-0 text-right text-sm font-bold">{cash(x.amount)}</span>
               </div>
             ))
           ) : (
@@ -731,7 +741,7 @@ function CustomerSelect({
     return () => document.removeEventListener("pointerdown", close);
   }, []);
   return (
-    <div ref={wrap} className="relative z-[9998] focus-within:z-[9998]">
+    <div ref={wrap} className="relative z-30 focus-within:z-50">
       <input
         className="field"
         value={
@@ -870,9 +880,11 @@ function ReportProductSelect({
 function ProductInput({
   line,
   onChange,
+  required = true,
 }: {
   line: any;
   onChange: (v: any) => void;
+  required?: boolean;
 }) {
   const [q, setQ] = useState(line.name);
   const [items, setItems] = useState<any[]>([]);
@@ -898,9 +910,9 @@ function ProductInput({
     return () => document.removeEventListener("pointerdown", close);
   }, []);
   return (
-    <div ref={wrap} className="relative">
+    <div ref={wrap} className="relative min-w-0">
       <input
-        className="field min-w-52"
+        className="field w-full min-w-0"
         value={q}
         placeholder="Type product name"
         onFocus={() => setOpen(true)}
@@ -910,10 +922,10 @@ function ProductInput({
           setOpen(true);
           onChange({ ...line, name: e.target.value, product_id: null });
         }}
-        required
+        required={required}
       />
       {open && q && items.length > 0 && (
-        <div className="absolute left-0 top-full z-[9999] mt-2 max-h-64 w-full min-w-72 overflow-auto rounded-xl border-2 border-emerald-600 bg-white p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.35)]">
+        <div className="absolute left-0 top-full z-[9999] mt-2 max-h-64 w-[min(18rem,calc(100vw-3rem))] max-w-[calc(100vw-3rem)] overflow-auto rounded-xl border-2 border-emerald-600 bg-white p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.35)] sm:w-full sm:min-w-72">
           <div className="sticky top-0 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-emerald-800">
             <Search size={14} />
             Suggested products
@@ -941,9 +953,11 @@ function ProductInput({
 function SaleForm({
   notify,
   go,
+  banglaNumbers = false,
 }: {
   notify: (s: string) => void;
   go: (s: string) => void;
+  banglaNumbers?: boolean;
 }) {
   const [customer, setCustomer] = useState<any>(null);
   const [customerRefresh, setCustomerRefresh] = useState(0);
@@ -955,6 +969,7 @@ function SaleForm({
   const [phone, setPhone] = useState("");
   const [discount, setDiscount] = useState(0);
   const [paid, setPaid] = useState(0);
+  const [manualDue, setManualDue] = useState(0);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [lines, setLines] = useState<any[]>([
@@ -975,6 +990,8 @@ function SaleForm({
     [lines],
   );
   const total = Math.max(0, subtotal - lineDisc - Number(discount || 0));
+  const hasNamedProduct = lines.some((line) => String(line.name || "").trim());
+  const displayedTotal = hasNamedProduct ? total : paid + manualDue;
   useEffect(() => {
     if (!customer) setPaid(total);
   }, [customer, total]);
@@ -994,6 +1011,7 @@ function SaleForm({
         buyer_phone: phone,
         invoice_discount: discount,
         paid_amount: paid,
+        manual_due_amount: manualDue,
         notes,
         items: lines,
       });
@@ -1015,7 +1033,7 @@ function SaleForm({
         phone: values.phone,
         area_id: values.area_id,
         village_id: values.village_id,
-        opening_amount: values.opening_amount,
+        opening_amount: cleanDecimal(String(values.opening_amount || "0")) || "0",
         opening_type: "due",
         opening_date: TODAY,
         status: "active",
@@ -1039,8 +1057,8 @@ function SaleForm({
         title="New Sale"
         subtitle="Type a product name or select a previous suggestion"
       />
-      <div className="grid gap-5 xl:grid-cols-[1fr_330px]">
-        <section className="card p-5">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_330px] xl:gap-5">
+        <section className="card min-w-0 p-3 sm:p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">Customer</label>
@@ -1059,15 +1077,18 @@ function SaleForm({
               <label className="label">Sale date</label>
               <input
                 className="field"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+                type={banglaNumbers ? "text" : "date"}
+                inputMode={banglaNumbers ? "numeric" : undefined}
+                placeholder={banglaNumbers ? "বছর-মাস-দিন" : undefined}
+                value={banglaNumbers ? toBanglaNumber(date) : date}
+                onChange={(e) => setDate(banglaNumbers ? cleanDate(e.target.value) : e.target.value)}
+                pattern={banglaNumbers ? "[০-৯]{4}-[০-৯]{2}-[০-৯]{2}" : undefined}
                 required
               />
             </div>
           </div>
-          <div className="mt-5 table-wrap overflow-visible">
-            <table className="table">
+          <div className="sale-lines-wrap mt-5 table-wrap overflow-visible">
+            <table className="sale-lines-table table">
               <thead>
                 <tr>
                   <th>Product</th>
@@ -1081,52 +1102,49 @@ function SaleForm({
               <tbody>
                 {lines.map((x, i) => (
                   <tr key={i}>
-                    <td>
-                      <ProductInput line={x} onChange={(v) => update(i, v)} />
+                    <td data-label="Product">
+                      <ProductInput line={x} onChange={(v) => update(i, v)} required={false} />
                     </td>
-                    <td>
+                    <td data-label="Qty">
                       <input
                         className="field"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        value={x.quantity}
+                        type="text"
+                        inputMode="decimal"
+                        value={decimalValue(x.quantity, banglaNumbers)}
                         onChange={(e) =>
-                          update(i, { ...x, quantity: e.target.value })
+                          update(i, { ...x, quantity: cleanDecimal(e.target.value) })
                         }
                       />
                     </td>
-                    <td>
+                    <td data-label="Price">
                       <input
                         className="field"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={x.unit_price}
+                        type="text"
+                        inputMode="decimal"
+                        value={decimalValue(x.unit_price, banglaNumbers)}
                         onChange={(e) =>
-                          update(i, { ...x, unit_price: e.target.value })
+                          update(i, { ...x, unit_price: cleanDecimal(e.target.value) })
                         }
                       />
                     </td>
-                    <td>
+                    <td data-label="Discount">
                       <input
                         className="field"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={x.discount}
+                        type="text"
+                        inputMode="decimal"
+                        value={decimalValue(x.discount, banglaNumbers)}
                         onChange={(e) =>
-                          update(i, { ...x, discount: e.target.value })
+                          update(i, { ...x, discount: cleanDecimal(e.target.value) })
                         }
                       />
                     </td>
-                    <td className="amount font-semibold">
+                    <td data-label="Total" className="amount font-semibold">
                       {cash(
                         Number(x.quantity) * Number(x.unit_price) -
                           Number(x.discount),
                       )}
                     </td>
-                    <td>
+                    <td className="sale-line-remove">
                       <button
                         type="button"
                         disabled={lines.length === 1}
@@ -1157,13 +1175,13 @@ function SaleForm({
                 },
               ])
             }
-            className="btn btn-soft mt-4"
+            className="btn btn-soft mt-4 w-full sm:w-auto"
           >
             <Plus size={16} />
             Add row
           </button>
         </section>
-        <aside className="card h-fit p-5">
+        <aside className="card h-fit min-w-0 p-4 sm:p-5 xl:sticky xl:top-5">
           <h2 className="mb-4 font-bold">Payment summary</h2>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -1178,41 +1196,59 @@ function SaleForm({
               <label className="label">Invoice discount</label>
               <input
                 className="field text-right"
-                type="number"
-                min="0"
-                step="0.01"
-                value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))}
+                type="text"
+                inputMode="decimal"
+                value={decimalValue(discount, banglaNumbers)}
+                onChange={(e) => setDiscount(Number(cleanDecimal(e.target.value) || 0))}
               />
             </div>
             <div className="flex justify-between border-t pt-3 text-lg">
               <b>Grand total</b>
-              <b>{cash(total)}</b>
+              <b>{cash(displayedTotal)}</b>
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <label className="label !mb-0">Paid amount (Cash)</label>
-                <button
-                  type="button"
-                  className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                  onClick={() => setPaid(total)}
-                >
-                  Full Pay
-                </button>
+                {hasNamedProduct && (
+                  <button
+                    type="button"
+                    className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                    onClick={() => setPaid(total)}
+                  >
+                    Full Pay
+                  </button>
+                )}
               </div>
               <input
                 className="field text-right"
-                type="number"
-                min="0"
-                step="0.01"
-                value={paid}
-                onChange={(e) => setPaid(Number(e.target.value))}
+                type="text"
+                inputMode="decimal"
+                value={decimalValue(paid, banglaNumbers)}
+                onChange={(e) => setPaid(Number(cleanDecimal(e.target.value) || 0))}
               />
             </div>
+            {!hasNamedProduct && (
+              <div>
+                <label className="label">Due amount (no product)</label>
+                <input
+                  className="field text-right"
+                  type="text"
+                  inputMode="decimal"
+                  value={decimalValue(manualDue, banglaNumbers)}
+                  onChange={(event) => setManualDue(Number(cleanDecimal(event.target.value) || 0))}
+                />
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Due</span>
-              <b className="text-amber-700">{cash(total - paid)}</b>
+              <b className="text-amber-700">{cash(Math.max(0, displayedTotal - paid))}</b>
             </div>
+            {hasNamedProduct && paid > total && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Previous due payment / advance</span>
+                <b>{cash(paid - total)}</b>
+              </div>
+            )}
             <div>
               <label className="label">Notes</label>
               <textarea
@@ -1250,7 +1286,17 @@ function SaleForm({
             </div>
             <div>
               <label className="label">Opening due</label>
-              <input className="field" name="opening_amount" type="number" min="0" step="0.01" defaultValue="0" required />
+              <input
+                className="field"
+                name="opening_amount"
+                type="text"
+                inputMode="decimal"
+                defaultValue={decimalValue(0, banglaNumbers)}
+                onInput={(event) => {
+                  event.currentTarget.value = decimalValue(cleanDecimal(event.currentTarget.value), banglaNumbers);
+                }}
+                required
+              />
               <p className="mt-1 text-xs text-slate-500">Opening date: {TODAY}</p>
             </div>
             <button className="btn btn-primary w-full">Save Customer</button>
@@ -1266,11 +1312,13 @@ function Sales({
   notify,
   refresh,
   go,
+  banglaNumbers = false,
 }: {
   tick: number;
   notify: (s: string) => void;
   refresh: () => void;
   go: (s: string) => void;
+  banglaNumbers?: boolean;
 }) {
   const [q, setQ] = useState("");
   const { data = [], loading } = useData(
@@ -1339,7 +1387,6 @@ function Sales({
                   <th>Invoice</th>
                   <th>Date</th>
                   <th>Customer</th>
-                  <th>Status</th>
                   <th className="amount">Total</th>
                   <th className="amount">Paid</th>
                   <th className="amount">Due</th>
@@ -1352,9 +1399,6 @@ function Sales({
                     <td className="font-semibold">{x.invoice_no}</td>
                     <td>{x.sale_date}</td>
                     <td>{x.customer_name || x.buyer_name || "Walk-in"}</td>
-                    <td>
-                      <Status value={x.status} />
-                    </td>
                     <td className="amount">{cash(x.grand_total)}</td>
                     <td className="amount">{cash(x.paid_amount)}</td>
                     <td className="amount">{cash(x.due_amount)}</td>
@@ -1380,6 +1424,7 @@ function Sales({
       {edit && (
         <EditSaleModal
           saleId={edit}
+          banglaNumbers={banglaNumbers}
           onClose={() => setEdit(null)}
           done={() => {
             setEdit(null);
@@ -1456,6 +1501,7 @@ function Invoice({ data, onClose, printMode = false }: { data: any; onClose: () 
             <b>{label("Phone", "ফোন")}:</b> {invoiceValue(s.customer_phone || s.buyer_phone || "—")}
           </div>
         </div>
+        {data.items.length > 0 ? (
         <table className="table">
           <thead>
             <tr>
@@ -1478,6 +1524,11 @@ function Invoice({ data, onClose, printMode = false }: { data: any; onClose: () 
             ))}
           </tbody>
         </table>
+        ) : (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+            {label("Due-only entry (no product)", "শুধু বকেয়া এন্ট্রি (কোনো পণ্য নেই)")}
+          </div>
+        )}
         <div className="ml-auto mt-5 w-64 space-y-2 text-sm">
           <div className="flex justify-between">
             <span>{label("Grand total", "সর্বমোট")}</span>
@@ -1503,10 +1554,12 @@ function Invoice({ data, onClose, printMode = false }: { data: any; onClose: () 
 }
 function EditSaleModal({
   saleId,
+  banglaNumbers,
   onClose,
   done,
 }: {
   saleId: number;
+  banglaNumbers: boolean;
   onClose: () => void;
   done: () => void;
 }) {
@@ -1519,11 +1572,11 @@ function EditSaleModal({
     );
   return (
     <Modal title={`Edit ${data.sale.invoice_no}`} onClose={onClose} wide>
-      <EditSaleForm data={data} done={done} />
+      <EditSaleForm data={data} done={done} banglaNumbers={banglaNumbers} />
     </Modal>
   );
 }
-function EditSaleForm({ data, done }: { data: any; done: () => void }) {
+function EditSaleForm({ data, done, banglaNumbers }: { data: any; done: () => void; banglaNumbers: boolean }) {
   const s = data.sale;
   const [customer, setCustomer] = useState<any>(s.customer_id);
   const [date, setDate] = useState(s.sale_date);
@@ -1531,6 +1584,7 @@ function EditSaleForm({ data, done }: { data: any; done: () => void }) {
   const [phone, setPhone] = useState(s.buyer_phone || "");
   const [discount, setDiscount] = useState(Number(s.invoice_discount));
   const [paid, setPaid] = useState(Number(s.paid_amount));
+  const [manualDue, setManualDue] = useState(Number(s.due_amount));
   const [notes, setNotes] = useState(s.notes || "");
   const [busy, setBusy] = useState(false);
   const [lines, setLines] = useState<any[]>(
@@ -1557,6 +1611,8 @@ function EditSaleForm({ data, done }: { data: any; done: () => void }) {
     [lines],
   );
   const total = Math.max(0, subtotal - lineDisc - Number(discount || 0));
+  const hasNamedProduct = lines.some((line) => String(line.name || "").trim());
+  const displayedTotal = hasNamedProduct ? total : paid + manualDue;
   useEffect(() => {
     if (!customer) setPaid(total);
   }, [customer, total]);
@@ -1573,6 +1629,7 @@ function EditSaleForm({ data, done }: { data: any; done: () => void }) {
         buyer_phone: phone,
         invoice_discount: discount,
         paid_amount: paid,
+        manual_due_amount: hasNamedProduct ? undefined : manualDue,
         notes,
         items: lines,
       });
@@ -1594,9 +1651,12 @@ function EditSaleForm({ data, done }: { data: any; done: () => void }) {
           <label className="label">Sale date</label>
           <input
             className="field"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+            type={banglaNumbers ? "text" : "date"}
+            inputMode={banglaNumbers ? "numeric" : undefined}
+            placeholder={banglaNumbers ? "বছর-মাস-দিন" : undefined}
+            value={banglaNumbers ? toBanglaNumber(date) : date}
+            onChange={(e) => setDate(banglaNumbers ? cleanDate(e.target.value) : e.target.value)}
+            pattern={banglaNumbers ? "[০-৯]{4}-[০-৯]{2}-[০-৯]{2}" : undefined}
             required
           />
         </div>
@@ -1642,36 +1702,33 @@ function EditSaleForm({ data, done }: { data: any; done: () => void }) {
                 <td>
                   <input
                     className="field w-24"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={x.quantity}
+                    type="text"
+                    inputMode="decimal"
+                    value={decimalValue(x.quantity, banglaNumbers)}
                     onChange={(e) =>
-                      update(i, { ...x, quantity: e.target.value })
+                      update(i, { ...x, quantity: cleanDecimal(e.target.value) })
                     }
                   />
                 </td>
                 <td>
                   <input
                     className="field w-28"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={x.unit_price}
+                    type="text"
+                    inputMode="decimal"
+                    value={decimalValue(x.unit_price, banglaNumbers)}
                     onChange={(e) =>
-                      update(i, { ...x, unit_price: e.target.value })
+                      update(i, { ...x, unit_price: cleanDecimal(e.target.value) })
                     }
                   />
                 </td>
                 <td>
                   <input
                     className="field w-28"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={x.discount}
+                    type="text"
+                    inputMode="decimal"
+                    value={decimalValue(x.discount, banglaNumbers)}
                     onChange={(e) =>
-                      update(i, { ...x, discount: e.target.value })
+                      update(i, { ...x, discount: cleanDecimal(e.target.value) })
                     }
                   />
                 </td>
@@ -1720,32 +1777,42 @@ function EditSaleForm({ data, done }: { data: any; done: () => void }) {
           <label className="label">Invoice discount</label>
           <input
             className="field"
-            type="number"
-            min="0"
-            step="0.01"
-            value={discount}
-            onChange={(e) => setDiscount(Number(e.target.value))}
+            type="text"
+            inputMode="decimal"
+            value={decimalValue(discount, banglaNumbers)}
+            onChange={(e) => setDiscount(Number(cleanDecimal(e.target.value) || 0))}
           />
         </div>
         <div>
           <label className="label">Paid amount</label>
           <input
             className="field"
-            type="number"
-            min="0"
-            step="0.01"
-            value={paid}
-            onChange={(e) => setPaid(Number(e.target.value))}
+            type="text"
+            inputMode="decimal"
+            value={decimalValue(paid, banglaNumbers)}
+            onChange={(e) => setPaid(Number(cleanDecimal(e.target.value) || 0))}
           />
         </div>
+        {!hasNamedProduct && (
+          <div>
+            <label className="label">Due amount (no product)</label>
+            <input
+              className="field"
+              type="text"
+              inputMode="decimal"
+              value={decimalValue(manualDue, banglaNumbers)}
+              onChange={(event) => setManualDue(Number(cleanDecimal(event.target.value) || 0))}
+            />
+          </div>
+        )}
         <div>
           <label className="label">Grand total</label>
-          <div className="field bg-slate-50 font-bold">{cash(total)}</div>
+          <div className="field bg-slate-50 font-bold">{cash(displayedTotal)}</div>
         </div>
         <div>
           <label className="label">Due</label>
           <div className="field bg-slate-50 font-bold">
-            {cash(total - paid)}
+            {cash(Math.max(0, displayedTotal - paid))}
           </div>
         </div>
       </div>
@@ -2116,37 +2183,37 @@ function Customers({
                   <option>inactive</option>
                 </select>
               </div>
-              {!form.id && (
-                <>
-                  <div>
-                    <label className="label">Opening amount</label>
-                    <input
-                      className="field"
-                      name="opening_amount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Opening type</label>
-                    <select className="field" name="opening_type">
-                      <option value="due">Due</option>
-                      <option value="advance">Advance</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Opening date</label>
-                    <input
-                      className="field"
-                      name="opening_date"
-                      type="date"
-                      defaultValue={TODAY}
-                    />
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="label">Opening amount</label>
+                <input
+                  className="field"
+                  name="opening_amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={form.opening_amount || 0}
+                />
+              </div>
+              <div>
+                <label className="label">Opening type</label>
+                <select
+                  className="field"
+                  name="opening_type"
+                  defaultValue={form.opening_type || "due"}
+                >
+                  <option value="due">Due</option>
+                  <option value="advance">Advance</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Opening date</label>
+                <input
+                  className="field"
+                  name="opening_date"
+                  type="date"
+                  defaultValue={String(form.opening_date || TODAY).slice(0, 10)}
+                />
+              </div>
             </div>
             <button className="btn btn-primary mt-5 w-full">
               Save customer
@@ -2213,19 +2280,21 @@ function Products({
         title="Products"
         subtitle="Products created automatically from sales and direct returns"
         action={
-          <div className="flex gap-2">
-            <button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={16} /> Add Product</button>
-            <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-3 text-slate-400"
-            />
-            <input
-              className="field !pl-9"
-              placeholder="Search products"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button className="btn btn-primary w-full whitespace-nowrap sm:w-auto" onClick={() => setAdding(true)}>
+              <Plus size={16} /> Add Product
+            </button>
+            <div className="relative w-full sm:w-64">
+              <Search
+                size={16}
+                className="absolute left-3 top-3 text-slate-400"
+              />
+              <input
+                className="field !pl-9"
+                placeholder="Search products"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
             </div>
           </div>
         }
@@ -3266,13 +3335,18 @@ function Reports() {
   function csv() {
     if (!data) return;
     const lines = [
-      ["Product", "Quantity", "Gross", "Returns", "Net"],
-      ...data.products.map((x: any) => [
+      ["Date", "Invoice", "Customer", "Area", "Village", "Product", "Quantity", "Unit Price", "Discount", "Total"],
+      ...(data.sales || []).map((x: any) => [
+        x.sale_date,
+        x.invoice_no,
+        x.customer_name,
+        x.area_name || "",
+        x.village_name || "",
         x.product_name,
-        x.quantity,
-        x.gross,
-        x.returned,
-        Number(x.gross) - Number(x.returned),
+        x.quantity ?? "",
+        x.unit_price ?? "",
+        x.discount,
+        x.total,
       ]),
     ];
     const blob = new Blob(
@@ -3305,30 +3379,12 @@ function Reports() {
       />
       <div className="card no-print mb-5 grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-7">
         <div>
-          <label className="label">From date</label>
-          <input
-            className="field"
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </div>
-        <div>
           <label className="label">Area</label>
           <AreaSelect value={area} onChange={changeArea} />
         </div>
         <div>
           <label className="label">Village</label>
           <VillageSelect value={village} areaId={area} onChange={changeVillage} />
-        </div>
-        <div>
-          <label className="label">To date</label>
-          <input
-            className="field"
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
         </div>
         <div>
           <label className="label">Customer</label>
@@ -3338,6 +3394,24 @@ function Reports() {
             emptyLabel="All Customers"
             areaId={area}
             villageId={village}
+          />
+        </div>
+        <div>
+          <label className="label">From date</label>
+          <input
+            className="field"
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">To date</label>
+          <input
+            className="field"
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
           />
         </div>
         <div>
@@ -3375,9 +3449,9 @@ function Reports() {
                 </div>
               ))}
             </div>
-            <section className="card print-card p-5">
+            <section className="card print-card mb-5 p-5">
               <div className="mb-4">
-                <h2 className="font-bold">Product-wise sales</h2>
+                <h2 className="font-bold">Sales details</h2>
                 <p className="text-sm text-slate-500">
                   {from} to {to}
                 </p>
@@ -3386,35 +3460,43 @@ function Reports() {
                 <table className="table">
                   <thead>
                     <tr>
+                      <th>Invoice</th>
+                      <th>Customer</th>
+                      <th>Area</th>
+                      <th>Village</th>
+                      <th>Date</th>
                       <th>Product</th>
                       <th className="amount">Quantity</th>
-                      <th className="amount">Gross</th>
-                      <th className="amount">Returns</th>
-                      <th className="amount">Net</th>
+                      <th className="amount">Unit Price</th>
+                      <th className="amount">Discount</th>
+                      <th className="amount">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.products.map((x: any) => (
-                      <tr key={x.product_name}>
-                        <td className="font-semibold">{x.product_name}</td>
-                        <td className="amount">{x.quantity}</td>
-                        <td className="amount">{cash(x.gross)}</td>
-                        <td className="amount">{cash(x.returned)}</td>
-                        <td className="amount font-bold">
-                          {cash(Number(x.gross) - Number(x.returned))}
-                        </td>
+                    {(data.sales || []).map((sale: any) => (
+                      <tr key={`${sale.sale_id}-${sale.item_id ?? "due"}`}>
+                        <td className="font-semibold">{sale.invoice_no}</td>
+                        <td>{sale.customer_name}</td>
+                        <td>{sale.area_name || "—"}</td>
+                        <td>{sale.village_name || "—"}</td>
+                        <td>{sale.sale_date}</td>
+                        <td>{sale.product_name || "—"}</td>
+                        <td className="amount">{sale.quantity ?? "—"}</td>
+                        <td className="amount">{sale.unit_price == null ? "—" : cash(sale.unit_price)}</td>
+                        <td className="amount">{cash(sale.discount)}</td>
+                        <td className="amount">{cash(sale.total)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <button
-                onClick={() => window.print()}
-                className="no-print btn btn-soft mt-4"
-              >
-                Print report
-              </button>
             </section>
+            <button
+              onClick={() => window.print()}
+              className="no-print btn btn-soft"
+            >
+              Print report
+            </button>
           </>
         )
       )}

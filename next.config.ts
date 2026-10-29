@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["lite-pos.test"],
   agentRules: false,
   serverExternalPackages: ["sync-mysql", "sync-rpc"],
   /* config options here */

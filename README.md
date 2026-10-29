@@ -1,11 +1,12 @@
 # Lite POS
 
-A lightweight customer-ledger POS built with Next.js, React, Tailwind CSS, and SQLite. Products are created automatically during a sale, so there is no product setup, purchase, warehouse, or stock module.
+A lightweight customer-ledger POS built with Next.js, React, Tailwind CSS, and MySQL/MariaDB. Products are created automatically during a sale, so there is no product setup, purchase, warehouse, or stock module.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
+- MySQL 8+ or MariaDB 10.4+
 
 ## Setup
 
@@ -18,14 +19,14 @@ Open `http://localhost:3000`.
 
 Default login:
 
-- Email: `admin@litepos.local`
-- Password: `admin123`
+- Email: `admin@gmail.com`
+- Password: `123456`
 
 Change `AUTH_SECRET` and the administrator password before production use.
 
 ## Database
 
-The SQLite database is created automatically at `database/lite-pos.sqlite`. It is intentionally excluded from Git. Set `DATABASE_PATH` to use a different location.
+Copy `.env.example` to `.env.local` and adjust the MySQL credentials if needed. The configured database, tables, indexes, and seed records are created automatically at startup. Applied schema versions are recorded in `schema_migrations`.
 
 ## Features
 
@@ -52,4 +53,4 @@ npm run build
 npm start
 ```
 
-The application uses SQLite WAL mode and database transactions for financial operations.
+The application uses InnoDB and database transactions for financial operations.

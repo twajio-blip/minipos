@@ -36,7 +36,11 @@ export async function GET(req: NextRequest) {
     if (areaId) params.push(areaId);
     if (villageId) params.push(villageId);
     const data = rows(
-      `SELECT c.*,c.zone_id area_id,z.name area_name,v.name village_name,ROUND(COALESCE(SUM(l.debit-l.credit),0),2) balance
+      `SELECT c.*,c.zone_id area_id,z.name area_name,v.name village_name,
+      COALESCE((SELECT CASE WHEN oe.type='opening_due' THEN oe.debit ELSE oe.credit END FROM ledger_entries oe WHERE oe.customer_id=c.id AND oe.reference_type='customer' AND oe.type IN ('opening_due','opening_advance') LIMIT 1),0) opening_amount,
+      COALESCE((SELECT CASE WHEN oe.type='opening_advance' THEN 'advance' ELSE 'due' END FROM ledger_entries oe WHERE oe.customer_id=c.id AND oe.reference_type='customer' AND oe.type IN ('opening_due','opening_advance') LIMIT 1),'due') opening_type,
+      COALESCE((SELECT oe.txn_date FROM ledger_entries oe WHERE oe.customer_id=c.id AND oe.reference_type='customer' AND oe.type IN ('opening_due','opening_advance') LIMIT 1),CURRENT_DATE) opening_date,
+      ROUND(COALESCE(SUM(l.debit-l.credit),0),2) balance
       FROM customers c LEFT JOIN zones z ON z.id=c.zone_id LEFT JOIN villages v ON v.id=c.village_id LEFT JOIN ledger_entries l ON l.customer_id=c.id
       WHERE (c.name LIKE ? OR c.code LIKE ? OR COALESCE(c.phone,'') LIKE ?) ${areaCondition} ${villageCondition}
       GROUP BY c.id ORDER BY c.id DESC`,
@@ -159,7 +163,7 @@ export async function GET(req: NextRequest) {
       req.nextUrl.searchParams.get("product_id") || 0,
     );
     const reportSearch = req.nextUrl.searchParams.get("search")?.trim() || "";
-    const conditions = ["s.status='active'", "s.sale_date BETWEEN ? AND ?"];
+    const conditions = ["s.sale_date BETWEEN ? AND ?"];
     const params: unknown[] = [from, to];
     if (reportCustomer) {
       conditions.push("s.customer_id=?");
@@ -206,7 +210,7 @@ export async function GET(req: NextRequest) {
         )
         .get(from, to) as { total: number }
     ).total;
-    const itemConditions = ["s.status='active'", "s.sale_date BETWEEN ? AND ?"];
+    const itemConditions = ["s.sale_date BETWEEN ? AND ?"];
     const itemParams: unknown[] = [from, to];
     if (reportCustomer) {
       itemConditions.push("s.customer_id=?");
@@ -231,21 +235,29 @@ export async function GET(req: NextRequest) {
         `%${reportSearch}%`,
       );
     }
-    const products = rows(
-      `SELECT si.product_name,SUM(si.quantity) quantity,SUM(si.total) gross,COALESCE(SUM((SELECT SUM(sri.total) FROM sales_return_items sri JOIN sales_returns sr ON sr.id=sri.return_id WHERE sri.sale_item_id=si.id AND sr.status='active' AND sr.return_date BETWEEN ? AND ?)),0) returned FROM sale_items si JOIN sales s ON s.id=si.sale_id LEFT JOIN customers c ON c.id=s.customer_id WHERE ${itemConditions.join(" AND ")} GROUP BY si.product_id,si.product_name ORDER BY gross DESC`,
-      from,
-      to,
+    const sales = rows(
+      `SELECT si.id item_id,s.id sale_id,s.invoice_no,s.sale_date,
+       COALESCE(c.name,s.buyer_name,'Walk-in') customer_name,
+       z.name area_name,v.name village_name,
+       CASE WHEN si.id IS NULL THEN 'Due-only entry' ELSE si.product_name END product_name,
+       si.quantity,si.unit_price,COALESCE(si.discount,s.invoice_discount) discount,
+       COALESCE(si.total,s.grand_total) total
+       FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id
+       LEFT JOIN customers c ON c.id=s.customer_id
+       LEFT JOIN zones z ON z.id=c.zone_id LEFT JOIN villages v ON v.id=c.village_id
+       WHERE ${itemConditions.join(" AND ")}
+       ORDER BY s.sale_date DESC,s.id DESC,si.id`,
       ...itemParams,
     );
     return NextResponse.json({
       summary,
       returns: money(invoiceReturns + directReturns),
-      products,
+      sales,
     });
   }
   const metrics = db
     .prepare(
-      `SELECT COALESCE(SUM(CASE WHEN sale_date=? AND status='active' THEN grand_total ELSE 0 END),0) today_sales,COALESCE(SUM(CASE WHEN sale_date=? AND status='active' THEN paid_amount ELSE 0 END),0) today_sale_cash,COUNT(CASE WHEN sale_date=? AND status='active' THEN 1 END) today_invoices FROM sales`,
+      `SELECT COALESCE(SUM(CASE WHEN sale_date=? THEN grand_total ELSE 0 END),0) today_sales,COALESCE(SUM(CASE WHEN sale_date=? THEN paid_amount ELSE 0 END),0) today_sale_cash,COUNT(CASE WHEN sale_date=? THEN 1 END) today_invoices FROM sales`,
     )
     .get(today(), today(), today()) as Record<string, number>;
   const saleRet = (
@@ -291,10 +303,10 @@ export async function GET(req: NextRequest) {
       ),
     },
     recent: rows(
-      "SELECT s.id,s.invoice_no,s.sale_date,s.grand_total,s.status,COALESCE(c.name,s.buyer_name,'Walk-in') customer_name FROM sales s LEFT JOIN customers c ON c.id=s.customer_id ORDER BY s.id DESC LIMIT 8",
+      "SELECT s.id,s.invoice_no,s.sale_date,s.grand_total,COALESCE(c.name,s.buyer_name,'Walk-in') customer_name FROM sales s LEFT JOIN customers c ON c.id=s.customer_id ORDER BY s.id DESC LIMIT 8",
     ),
     top: rows(
-      "SELECT product_name,SUM(quantity) quantity,SUM(total) amount FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.status='active' GROUP BY product_id,product_name ORDER BY amount DESC LIMIT 5",
+      "SELECT product_name,SUM(quantity) quantity,SUM(total) amount FROM sale_items si JOIN sales s ON s.id=si.sale_id GROUP BY product_id,product_name ORDER BY amount DESC LIMIT 5",
     ),
   });
 }
@@ -416,6 +428,22 @@ export async function POST(req: NextRequest) {
             p.status,
             p.id,
           );
+          const customer = db.prepare("SELECT code FROM customers WHERE id=?").get(p.id) as { code: string };
+          db.prepare("DELETE FROM ledger_entries WHERE customer_id=? AND reference_type='customer' AND type IN ('opening_due','opening_advance')").run(p.id);
+          if (p.opening_amount > 0)
+            db.prepare(
+              `INSERT INTO ledger_entries(customer_id,txn_date,type,reference_type,reference_id,reference_no,description,debit,credit) VALUES(?,?,?,?,?,?,?,?,?)`,
+            ).run(
+              p.id,
+              p.opening_date,
+              p.opening_type === "due" ? "opening_due" : "opening_advance",
+              "customer",
+              p.id,
+              customer.code,
+              "Opening balance",
+              p.opening_type === "due" ? money(p.opening_amount) : 0,
+              p.opening_type === "advance" ? money(p.opening_amount) : 0,
+            );
           return p.id;
         }
         const code = nextNumber("customers", "CUST-");
@@ -582,39 +610,45 @@ export async function POST(req: NextRequest) {
           buyer_phone: z.string().optional(),
           invoice_discount: z.coerce.number().min(0).default(0),
           paid_amount: z.coerce.number().min(0),
+          manual_due_amount: z.coerce.number().min(0).optional(),
           notes: z.string().optional(),
           items: z
             .array(
               z.object({
                 product_id: z.coerce.number().nullable().optional(),
-                name: z.string().trim().min(1),
+                name: z.string().trim(),
                 quantity: z.coerce.number().positive(),
                 unit_price: z.coerce.number().min(0),
                 discount: z.coerce.number().min(0).default(0),
               }),
-            )
-            .min(1),
+            ),
         })
         .parse(body);
       const id = db.transaction(() => {
         let subtotal = 0,
           lineDiscount = 0;
-        const prepared = p.items.map((item) => {
+        const namedItems = p.items.filter((item) => item.name.length > 0);
+        if (!namedItems.length && p.paid_amount + (p.manual_due_amount || 0) <= 0)
+          throw new Error("Enter a paid amount or due amount for a sale without a product.");
+        const prepared = namedItems.map((item) => {
           const gross = money(item.quantity * item.unit_price);
           const total = money(gross - item.discount);
           subtotal = money(subtotal + gross);
           lineDiscount = money(lineDiscount + item.discount);
           return { ...item, total };
         });
+        if (!namedItems.length) {
+          subtotal = money(
+            p.paid_amount + (p.manual_due_amount || 0) + p.invoice_discount,
+          );
+        }
         const grand = money(subtotal - lineDiscount - p.invoice_discount);
         if (grand < 0)
           throw new Error("Discount cannot exceed the invoice total.");
         if (!p.customer_id && money(p.paid_amount) !== grand)
           throw new Error("Walk-in sales must be fully paid.");
-        if (p.paid_amount > grand)
-          throw new Error("Paid amount cannot exceed invoice total.");
         const invoice = nextNumber("sales", "INV-");
-        const due = money(grand - p.paid_amount);
+        const due = money(Math.max(0, grand - p.paid_amount));
         const s = db
           .prepare(
             `INSERT INTO sales(invoice_no,sale_date,customer_id,buyer_name,buyer_phone,subtotal,line_discount,invoice_discount,grand_total,paid_amount,due_amount,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -637,7 +671,7 @@ export async function POST(req: NextRequest) {
         const saleId = Number(s.lastInsertRowid);
         for (const item of prepared) {
           let productId = item.product_id || null;
-          if (!productId) {
+          if (!productId && item.name) {
             const product = db
               .prepare(
                 "INSERT INTO products(name,normalized_name,price,use_count,last_used_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP)",
@@ -648,10 +682,10 @@ export async function POST(req: NextRequest) {
                 item.unit_price,
               );
             productId = Number(product.lastInsertRowid);
-          } else
+          } else if (productId)
             db.prepare(
-              "UPDATE products SET use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP WHERE id=?",
-            ).run(productId);
+              "UPDATE products SET price=?,use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP WHERE id=?",
+            ).run(item.unit_price, productId);
           db.prepare(
             "INSERT INTO sale_items(sale_id,product_id,product_name,quantity,unit_price,discount,total) VALUES(?,?,?,?,?,?,?)",
           ).run(
@@ -707,18 +741,18 @@ export async function POST(req: NextRequest) {
           buyer_phone: z.string().optional(),
           invoice_discount: z.coerce.number().min(0).default(0),
           paid_amount: z.coerce.number().min(0),
+          manual_due_amount: z.coerce.number().min(0).optional(),
           notes: z.string().optional(),
           items: z
             .array(
               z.object({
                 product_id: z.coerce.number().nullable().optional(),
-                name: z.string().trim().min(1),
+                name: z.string().trim(),
                 quantity: z.coerce.number().positive(),
                 unit_price: z.coerce.number().min(0),
                 discount: z.coerce.number().min(0).default(0),
               }),
-            )
-            .min(1),
+            ),
         })
         .parse(body);
       db.transaction(() => {
@@ -738,7 +772,14 @@ export async function POST(req: NextRequest) {
           );
         let subtotal = 0,
           lineDiscount = 0;
-        const prepared = p.items.map((item) => {
+        const namedItems = p.items.filter((item) => item.name.length > 0);
+        const existingBlankTotal = money(Number(old.grand_total || 0));
+        const blankTotal = p.manual_due_amount === undefined
+          ? existingBlankTotal
+          : money(p.paid_amount + p.manual_due_amount);
+        if (!namedItems.length && blankTotal <= 0)
+          throw new Error("Enter a paid amount or due amount for a sale without a product.");
+        const prepared = namedItems.map((item) => {
           const gross = money(item.quantity * item.unit_price);
           const total = money(gross - item.discount);
           if (total < 0)
@@ -747,15 +788,16 @@ export async function POST(req: NextRequest) {
           lineDiscount = money(lineDiscount + item.discount);
           return { ...item, total };
         });
+        if (!namedItems.length) {
+          subtotal = money(blankTotal + p.invoice_discount);
+        }
         const grand = money(subtotal - lineDiscount - p.invoice_discount);
         if (grand < 0)
           throw new Error("Discount cannot exceed the invoice total.");
         if (!p.customer_id && money(p.paid_amount) !== grand)
           throw new Error("Walk-in sales must be fully paid.");
-        if (p.paid_amount > grand)
-          throw new Error("Paid amount cannot exceed invoice total.");
         const invoice = String(old.invoice_no);
-        const due = money(grand - p.paid_amount);
+        const due = money(Math.max(0, grand - p.paid_amount));
         db.prepare(
           "DELETE FROM ledger_entries WHERE reference_type='sale' AND reference_id=?",
         ).run(p.id);
@@ -778,7 +820,7 @@ export async function POST(req: NextRequest) {
         );
         for (const item of prepared) {
           let productId = item.product_id || null;
-          if (!productId) {
+          if (!productId && item.name) {
             const product = db
               .prepare(
                 "INSERT INTO products(name,normalized_name,price,use_count,last_used_at) VALUES(?,?,?,1,CURRENT_TIMESTAMP)",
@@ -789,10 +831,10 @@ export async function POST(req: NextRequest) {
                 item.unit_price,
               );
             productId = Number(product.lastInsertRowid);
-          } else
+          } else if (productId)
             db.prepare(
-              "UPDATE products SET use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP WHERE id=?",
-            ).run(productId);
+              "UPDATE products SET price=?,use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP WHERE id=?",
+            ).run(item.unit_price, productId);
           db.prepare(
             "INSERT INTO sale_items(sale_id,product_id,product_name,quantity,unit_price,discount,total) VALUES(?,?,?,?,?,?,?)",
           ).run(
@@ -998,7 +1040,7 @@ export async function POST(req: NextRequest) {
         .parse(body);
       const id = db.transaction(() => {
         const sale = db
-          .prepare("SELECT * FROM sales WHERE id=? AND status='active'")
+          .prepare("SELECT * FROM sales WHERE id=?")
           .get(p.sale_id) as Record<string, number | string | null> | undefined;
         if (!sale) throw new Error("Active sale not found.");
         let total = 0;
@@ -1331,30 +1373,10 @@ export async function POST(req: NextRequest) {
         })
         .parse(body);
       const kind = action.split(".")[0];
+      if (kind === "sale")
+        return fail("Sale status is not used. Delete the sale if it must be removed.");
       db.transaction(() => {
-        if (kind === "sale") {
-          const s = db
-            .prepare("SELECT id FROM sales WHERE id=? AND status='active'")
-            .get(p.id);
-          if (!s) throw new Error("Active sale not found.");
-          const returned = (
-            db
-              .prepare(
-                "SELECT COUNT(*) n FROM sales_returns WHERE sale_id=? AND status='active'",
-              )
-              .get(p.id) as { n: number }
-          ).n;
-          if (returned)
-            throw new Error(
-              "Cancel active returns before cancelling this sale.",
-            );
-          db.prepare(
-            "UPDATE sales SET status='cancelled',cancellation_reason=? WHERE id=?",
-          ).run(p.reason, p.id);
-          db.prepare(
-            "DELETE FROM ledger_entries WHERE reference_type='sale' AND reference_id=?",
-          ).run(p.id);
-        } else if (kind === "payment") {
+        if (kind === "payment") {
           if (
             !db
               .prepare("SELECT id FROM payments WHERE id=? AND status='active'")
@@ -1421,8 +1443,8 @@ export async function POST(req: NextRequest) {
     }
     if (action === "settings.language") {
       const language = body.language === "bn" ? "bn" : "en";
-      db.prepare("UPDATE settings SET language=? WHERE id=1").run(language);
-      return NextResponse.json({ language });
+      db.prepare("UPDATE settings SET language=?,numeral_system=? WHERE id=1").run(language, language);
+      return NextResponse.json({ language, numeral_system: language });
     }
     return fail("Unknown action", 404);
   } catch (e) {
